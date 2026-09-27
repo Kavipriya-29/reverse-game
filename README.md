@@ -13,8 +13,6 @@ Open `index.html` in Chrome/Edge/Firefox.
 5. Select `main` and `/ (root)`, then Save.
 6. GitHub will provide the live URL in the Pages section.
 
-Expected URL format:
-https://YOUR-GITHUB-USERNAME.github.io/reverse-prompt-game/
 
 ## Controls
 WASD / Arrow Keys.
