@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>RE:VERSE — The World You Prompt</title>
+<style>
+:root{--bg:#080b16;--panel:#11172a;--line:#273354;--text:#eaf0ff;--muted:#91a0c3;--accent:#7cf7d4;--danger:#ff668d;--gold:#ffd166}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 50% 0%,#17203c 0,#080b16 55%);color:var(--text);font-family:Inter,system-ui,Segoe UI,sans-serif;min-height:100vh}
+.wrap{max-width:1100px;margin:auto;padding:22px}.top{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:16px}
+h1{font-size:28px;margin:0;letter-spacing:2px}.tag{color:var(--accent);font-size:12px;letter-spacing:2px}
+.stats{display:flex;gap:9px;flex-wrap:wrap}.pill{background:#0f1526;border:1px solid var(--line);padding:9px 12px;border-radius:12px;font-size:13px}
+.game{display:grid;grid-template-columns:minmax(560px,1fr) 330px;gap:16px}.card{background:rgba(17,23,42,.88);border:1px solid var(--line);border-radius:18px;box-shadow:0 18px 50px #0005}
+.stage{padding:16px}.canvasbox{position:relative;background:#050711;border-radius:14px;overflow:hidden;border:1px solid #202a48}
+canvas{display:block;width:100%;height:auto;image-rendering:pixelated}
+.side{padding:18px}.side h2{font-size:16px;margin:0 0 8px}.side p{color:var(--muted);font-size:13px;line-height:1.5}
+.console{display:flex;gap:8px;margin-top:12px}.console input{flex:1;background:#080d1c;border:1px solid #334265;color:#fff;border-radius:10px;padding:11px;outline:none}.console button,.btn{border:0;background:var(--accent);color:#06110f;font-weight:800;border-radius:10px;padding:11px 14px;cursor:pointer}
+.commands{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}.cmd{background:#0b1222;border:1px solid #334265;color:#cfe1ff;border-radius:999px;padding:7px 9px;font-size:11px;cursor:pointer}.cmd:hover{border-color:var(--accent)}
+.log{height:150px;overflow:auto;background:#070b17;border:1px solid #222e4d;border-radius:10px;padding:9px;margin-top:12px;font:12px ui-monospace,monospace;color:#b8c7e8}.log div{margin-bottom:7px}.ok{color:var(--accent)}.warn{color:var(--gold)}.bad{color:var(--danger)}
+.help{margin-top:12px;font-size:12px;color:var(--muted)}kbd{background:#202a43;border:1px solid #3b496b;padding:2px 5px;border-radius:4px;color:#fff}
+.overlay{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:#050711d9;text-align:center;padding:30px}.overlay.show{display:flex}.modal h2{font-size:30px;margin:0 0 8px}.modal p{color:#aebbd7;max-width:520px;line-height:1.5}.modal .btn{margin-top:10px}
+@media(max-width:850px){.game{grid-template-columns:1fr}.side{order:2}.stage{padding:8px}.wrap{padding:10px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div><div class="tag">PROMPT-POWERED GAME • EVOX</div><h1>RE:VERSE</h1></div>
+    <div class="stats"><div class="pill">LEVEL <b id="level">1</b>/5</div><div class="pill">SHARDS <b id="score">0</b></div><div class="pill">ENERGY <b id="energy">3</b></div></div>
+  </div>
+  <div class="game">
+    <div class="card stage">
+      <div class="canvasbox">
+        <canvas id="game" width="720" height="500"></canvas>
+        <div id="overlay" class="overlay"><div class="modal"><h2 id="overTitle"></h2><p id="overText"></p><button class="btn" id="overBtn">CONTINUE</button></div></div>
+      </div>
+      <div class="console">
+        <input id="prompt" autocomplete="off" placeholder='Try: "invert gravity" or "freeze hazards"'>
+        <button id="run">PROMPT</button>
+      </div>
+      <div class="commands">
+        <button class="cmd">invert gravity</button><button class="cmd">freeze hazards</button>
+        <button class="cmd">reveal path</button><button class="cmd">swap colors</button>
+        <button class="cmd">echo step</button>
+      </div>
+    </div>
+    <div class="card side">
+      <h2>Reality Console</h2>
+      <p>You are the last <b>Prompt Engineer</b> inside a collapsing simulation. Collect every memory shard, then reach the portal. Your prompts temporarily rewrite one rule of the world.</p>
+      <p><b>Move:</b> <kbd>WASD</kbd> / <kbd>Arrow Keys</kbd><br><b>Prompt:</b> type a command or click a suggestion.</p>
+      <div class="log" id="log"></div>
+      <div class="help"><b>Prompt logic:</b> vague prompts may fail. Precise prompts consume less energy. Every level introduces a new constraint.</div>
+    </div>
+  </div>
+</div>
+<script>
+const c=document.getElementById("game"),ctx=c.getContext("2d"), W=c.width,H=c.height,cols=12,rows=8,T=60;
+let level=1,score=0,energy=3,mode="normal",reveal=0,echo=false,swap=false,won=false;
+let player={x:1,y:6}, shards=[], hazards=[], walls=[], portal={x:10,y:1}, keys={};
+const maps=[
+["############","#..#..S....#","#..#..###..#","#..S....#..#","#..###..#..#","#S....#....#","#.....#..P.#","############"],
+["############","#S..#......#","#.#.#.####.#","#.#...S....#","#.#####.##.#","#...S...#P.#","#......##..#","############"],
+["############","#...S....#P#","#.#####..#..#","#.....#..#S.#","#.###.#..##.#","#S..#....#..#","#...######..#","############"],
+["############","#S..#....S.P#","#.#.#.######","#.#...#....S#","#.###.#.###.#","#...S...#...#","#..######...#","############"],
+["############","#S..#..S...P#","#.#.#.######.#","#.#...#...S..#","#.###.#.###..#","#S..#...#....#","#...S...#....#","############"]
+];
+function log(t,cl=""){let d=document.createElement("div");d.className=cl;d.textContent="> "+t;document.getElementById("log").prepend(d)}
+function load(){
+ const m=maps[level-1]; shards=[];hazards=[];walls=[];mode="normal";reveal=0;echo=false;swap=false;won=false;energy=3;
+ for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){let ch=m[y][x];if(ch==="#")walls.push({x,y});if(ch==="S")shards.push({x,y,got:false});if(ch==="P")portal={x,y}}
+ player={x:1,y:6}; 
+ // deterministic hazards scale with level
+ hazards=[{x:8,y:2,dx:level%2?1:-1,dy:0},{x:3,y:5,dx:0,dy:level%2?1:-1}];
+ updateUI();log("Level "+level+": simulation loaded.","ok");
+}
+function blocked(x,y){return walls.some(w=>w.x===x&&w.y===y)}
+function move(dx,dy){
+ if(won)return; let nx=player.x+dx,ny=player.y+dy;
+ if(mode==="invert")dy=-dy,ny=player.y+dy;
+ if(nx<0||nx>=cols||ny<0||ny>=rows||blocked(nx,ny)){log("Collision: path blocked.","bad");return}
+ player.x=nx;player.y=ny;
+ if(echo){let ex=player.x-dx,ey=player.y-dy;if(!blocked(ex,ey)){}}
+ shards.forEach(s=>{if(!s.got&&s.x===player.x&&s.y===player.y){s.got=true;score++;log("Memory shard recovered.","ok")}});
+ if(player.x===portal.x&&player.y===portal.y){
+   if(shards.every(s=>s.got)){winLevel()} else log("Portal locked: recover every shard first.","warn")
+ }
+ updateUI();
+}
+function moveHazards(){
+ if(mode==="freeze")return;
+ hazards.forEach(h=>{let nx=h.x+h.dx,ny=h.y+h.dy;if(blocked(nx,ny)||nx<=0||nx>=cols-1||ny<=0||ny>=rows-1){h.dx*=-1;h.dy*=-1} else {h.x=nx;h.y=ny}
+ if(h.x===player.x&&h.y===player.y){log("Hazard hit. Prompt energy lost.","bad");energy=Math.max(0,energy-1);player={x:1,y:6};}});
+}
+function prompt(){
+ let raw=document.getElementById("prompt").value.trim().toLowerCase();if(!raw)return;
+ document.getElementById("prompt").value="";
+ if(energy<=0){log("No prompt energy left. Reach the portal with what you have.","bad");return}
+ energy--;
+ let p=raw.replace(/[^a-z ]/g,"");
+ if(p.includes("invert")&&p.includes("gravity")){mode=mode==="invert"?"normal":"invert";log("Gravity rule rewritten: "+mode+".","ok")}
+ else if(p.includes("freeze")&&p.includes("hazard")){mode=mode==="freeze"?"normal":"freeze";log("Hazards are "+(mode==="freeze"?"frozen.":"moving again."),"ok")}
+ else if(p.includes("reveal")&&p.includes("path")){reveal=8;log("Hidden route highlighted for 8 seconds.","ok")}
+ else if(p.includes("swap")&&p.includes("color")){swap=!swap;log("World palette polarity swapped.","ok")}
+ else if(p.includes("echo")&&p.includes("step")){echo=!echo;log("Echo-step "+(echo?"enabled.":"disabled."),"ok")}
+ else {energy++;log("Prompt rejected: be specific about the rule you want to change.","warn")}
+ updateUI();
+}
+function winLevel(){
+ won=true;
+ if(level<5){showOverlay("LEVEL CLEARED","The simulation accepted your prompt logic. Next level adds another constraint.","NEXT LEVEL")}
+ else {showOverlay("SIMULATION SAVED","You recovered the final memory shard and stabilized RE:VERSE. Your score: "+score+" shards.","RESTART")}
+}
+function showOverlay(t,txt,b){document.getElementById("overTitle").textContent=t;document.getElementById("overText").textContent=txt;document.getElementById("overBtn").textContent=b;document.getElementById("overlay").classList.add("show")}
+document.getElementById("overBtn").onclick=()=>{document.getElementById("overlay").classList.remove("show");if(level<5){level++;load()}else{level=1;score=0;load()}};
+document.getElementById("run").onclick=prompt;
+document.getElementById("prompt").addEventListener("keydown",e=>{if(e.key==="Enter")prompt()});
+document.querySelectorAll(".cmd").forEach(b=>b.onclick=()=>{document.getElementById("prompt").value=b.textContent;prompt()});
+addEventListener("keydown",e=>{keys[e.key.toLowerCase()]=true;if(["arrowup","arrowdown","arrowleft","arrowright"," "].includes(e.key.toLowerCase()))e.preventDefault();
+ if(e.key==="ArrowUp"||e.key.toLowerCase()==="w")move(0,-1);
+ if(e.key==="ArrowDown"||e.key.toLowerCase()==="s")move(0,1);
+ if(e.key==="ArrowLeft"||e.key.toLowerCase()==="a")move(-1,0);
+ if(e.key==="ArrowRight"||e.key.toLowerCase()==="d")move(1,0);
+});
+function updateUI(){document.getElementById("level").textContent=level;document.getElementById("score").textContent=score;document.getElementById("energy").textContent=energy}
+function draw(){
+ ctx.clearRect(0,0,W,H);ctx.fillStyle=swap?"#f4f0ff":"#080b16";ctx.fillRect(0,0,W,H);
+ for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){ctx.fillStyle=(x+y)%2?"#10172a":"#0d1324";ctx.fillRect(x*T,y*T,T,T)}
+ walls.forEach(w=>{ctx.fillStyle=swap?"#232044":"#253252";ctx.fillRect(w.x*T+3,w.y*T+3,T-6,T-6);ctx.fillStyle="#344366";ctx.fillRect(w.x*T+10,w.y*T+10,T-20,4)});
+ shards.forEach(s=>{if(!s.got){ctx.fillStyle="#ffd166";ctx.beginPath();ctx.moveTo(s.x*T+30,s.y*T+12);ctx.lineTo(s.x*T+45,s.y*T+30);ctx.lineTo(s.x*T+30,s.y*T+48);ctx.lineTo(s.x*T+15,s.y*T+30);ctx.closePath();ctx.fill()}});
+ ctx.strokeStyle="#7cf7d4";ctx.lineWidth=3;ctx.strokeRect(portal.x*T+12,portal.y*T+12,T-24,T-24);ctx.fillStyle="#7cf7d455";ctx.fillRect(portal.x*T+18,portal.y*T+18,T-36,T-36);
+ hazards.forEach(h=>{ctx.fillStyle="#ff668d";ctx.beginPath();ctx.arc(h.x*T+30,h.y*T+30,18,0,Math.PI*2);ctx.fill();ctx.fillStyle="#fff";ctx.fillRect(h.x*T+22,h.y*T+22,5,5);ctx.fillRect(h.x*T+33,h.y*T+22,5,5)});
+ ctx.fillStyle="#7cf7d4";ctx.beginPath();ctx.arc(player.x*T+30,player.y*T+30,19,0,Math.PI*2);ctx.fill();ctx.fillStyle="#06110f";ctx.fillRect(player.x*T+20,player.y*T+23,6,6);ctx.fillRect(player.x*T+34,player.y*T+23,6,6);
+ if(reveal>0){ctx.strokeStyle="#7cf7d4aa";ctx.lineWidth=2;let path=[];for(let y=1;y<rows-1;y++)for(let x=1;x<cols-1;x++)if(!blocked(x,y))path.push([x,y]);path.forEach(([x,y])=>ctx.strokeRect(x*T+20,y*T+20,20,20));reveal-=1}
+ requestAnimationFrame(draw);
+}
+setInterval(moveHazards,450);load();draw();
+</script>
+</body>
+</html>
